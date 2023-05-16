@@ -10,12 +10,10 @@ group-store.hoon
 chat-0.hoon
 cite.hoon
 < urbit/pkg/landscape/sur
-resource.hoon
 metadata-store.hoon
 post.hoon
 pull-hook.hoon
-< .
-landscape/desk/sur/hark-store.hoon
+hark-store.hoon
 
 > lib
 < urbit/pkg/landscape/lib
