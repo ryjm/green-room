@@ -26,7 +26,7 @@ while getopts "wgd:" opt; do
             ;;
     esac
 done
-DESK_DIR=$piers/zod/$project
+DESK_DIR=$piers/$pier/$project
 PIER=$(dirname $DESK_DIR)
 DESK=$(basename $DESK_DIR)
 
@@ -57,7 +57,7 @@ sync() {
     if [ "$GLOBBER" ]; then
         rsync -r --copy-links $dist/* $DESK_DIR/$project
     fi
-    copy zod
+    copy $pier
 }
 if [ ! -d "$DESK_DIR" ]; then
     echo "Creating new desk: $project"

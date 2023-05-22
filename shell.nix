@@ -15,7 +15,7 @@ let
     buildCommand = "${old.buildCommand}\n patchShebangs $out";
   });
   lensd = writeShellScriptBin "lensd" ''
-    DESK_DIR=$piers/zod/$project
+    DESK_DIR=$piers/$pier/$project
     PIER=$(dirname $DESK_DIR)
     DESK=$(basename $DESK_DIR)
 
@@ -27,7 +27,7 @@ let
   '';
   lensa = writeShellScriptBin "lensa" ''
     #!/usr/bin/env bash
-    DESK_DIR=$piers/zod/$project
+    DESK_DIR=$piers/$pier/$project
     PIER=$(dirname $DESK_DIR)
     DESK=$(basename $DESK_DIR)
 
@@ -76,7 +76,7 @@ mkShell {
   project = "green-room";
   desk = "desk";
   dist = "ui/dist";
-
+  pier = "green-moon";
   suite = runCommand "suite" { } ''
     cp -r ${../urbit} $out
   '';
