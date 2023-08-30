@@ -4,68 +4,122 @@
   |^
     %-  crip
     """
-
-    if (!window.fileUploader) \{
-      const dummyState = \{
-        uploadFiles: function() \{
-          console.log("uploadFiles not found");
-        },
-        createClient: function() \{
-          console.log("createClient not found");
-        },
-        getMostRecent: function() \{
-          console.log("getMostRecent not found");
-        },
-        clear: function() \{
-          console.log("clear not found");
-        },
-        uploaders: \{},
-
-      };
-
-      window.fileUploader = () => dummyState;
-    }
-    if (!window.fileStore) \{
-      console.log("fileStore not found");
-      const dummyState = \{
-        s3: \{
-          credentials: '',
-          configuration: \{
-            currentBucket: '',
-            region: '',
-          },
-        },
-      };
-
-      window.fileStore = () => dummyState;
-    }
-    if (!window.emptyUploader) \{
-      console.log("emptyUploader not found");
-      const dummyState = \{};
-
-      window.emptyUploader = () => dummyState;
-    }
     {css}
     {global:vars}
     {functions}
+    {sliders}
     Promise.all(loadScripts({global:scripts}))
+      .then(() => \{ loadCss() })
       .then(() => \{ {main} });
     """
   ::
   ++  main
     """
+
+    setTimeout(() => \{
+      isCurio = location.pathname.split('/').includes('curio')
+      }, 1000);
     setInterval(() => \{
-      updateCurio(key, path);
-      path = location.pathname;
-      isCurio = path.split('/').includes('curio')
-
       if (!isCurio) return;
-
+      if (typeof fileUploader !== 'undefined') \{
+        updateCurio(key);
+      }
       if ($('.green-room-button').length === 1) return;
-
       if (buttonAdded) return;
-      {button}
+      $(document).ready(() => \{
+        {button}
+      });
     }, 1000);
+    """
+  ::
+  ++  sliders
+    """
+    function setUpHtml5Sliders() \{
+
+      const rangeControls = [
+        window.imageEditor.ui.rotate._els.rotateRange,
+        window.imageEditor.ui.draw  ._els.drawRange,
+        window.imageEditor.ui.shape ._els.strokeRange,
+        window.imageEditor.ui.text  ._els.textRange,
+      ];
+
+      const filterControls = [
+        window.imageEditor.ui.filter._els.brightnessRange,
+        window.imageEditor.ui.filter._els.blurRange,
+        window.imageEditor.ui.filter._els.pixelateRange,
+        window.imageEditor.ui.filter._els.noiseRange,
+        window.imageEditor.ui.filter._els.colorFilterThresholdRange,
+        window.imageEditor.ui.filter._els.removewhiteDistanceRange,
+        window.imageEditor.ui.filter._els.tintOpacity,
+      ];
+      rangeControls.forEach( convertTuiRangeToHtml5Range );
+      filterControls.forEach( (range) => (range === undefined) ? range : range.rangeWidth = 100 );
+    }
+
+    function convertTuiRangeToHtml5Range( tuiRange ) \{
+      const divWrapper = tuiRange.rangeElement;
+      correctRangeLabelText( divWrapper );
+
+      const textBoxInput = tuiRange.rangeInputElement;
+
+      const rangeInput = document.createElement( 'input' );
+      rangeInput.type          = 'range';
+      if( rangeInput.type !== 'range' ) return;
+
+      rangeInput.min           = tuiRange._min.toString();
+      rangeInput.max           = tuiRange._max.toString();
+      rangeInput.style.width   = '100%';
+      rangeInput.style.display = 'inline-block';
+
+      copyInputNumberValue(  textBoxInput, rangeInput );
+
+      divWrapper.appendChild( rangeInput );
+
+      rangeInput.addEventListener( 'input', function( ev ) \{
+
+        const inp = ev.currentTarget;
+
+        textBoxInput.value = inp.value;
+        textBoxInput.dispatchEvent( new Event( 'blur' ) );
+      } );
+
+      textBoxInput.addEventListener( 'input', function( ev ) \{
+
+        copyInputNumberValue( textBoxInput, rangeInput );
+      } );
+
+      textBoxInput.type = 'number';
+      textBoxInput.min  = rangeInput.min;
+      textBoxInput.max  = rangeInput.max;
+
+      divWrapper.querySelector( 'div.tui-image-editor-virtual-range-bar' ).style.visibility = 'hidden';
+    }
+
+    function correctRangeLabelText( divWrapper ) \{
+      if( divWrapper.classList.contains( 'tie-rotate-range' ) ) \{
+        const label = divWrapper.parentElement.querySelector( 'label.range' );
+        if( label.textContent.trim() === "Range" ) \{
+          label.textContent = "Rotation angle";
+        }
+      }
+      else if( divWrapper.classList.contains( 'tie-draw-range' ) ) \{
+        const label = divWrapper.parentElement.querySelector( 'label.range' );
+        if( label.textContent.trim() === "Range" ) \{
+          label.textContent = "Brush size";
+        }
+      }
+    }
+
+    function copyInputNumberValue( src, dest ) \{
+      if( !src ) return;
+      const valueNum = parseInt( src.value, /*radix:*/ 10 );
+      if( isNaN( valueNum ) ) \{
+        dest.valueAsNumber = parseInt( dest.min );
+      }
+      else \{
+        dest.valueAsNumber = valueNum;
+      }
+    }
     """
   ::
   ++  button
@@ -74,10 +128,6 @@
       const images = document.querySelectorAll('div > div > div > div > main > div > div.group.relative.flex.flex-1 > div > img');
       const editButton = Array.from(buttons).find(button => button.innerHTML === 'Edit');
       if (!editButton || (images.length === 0)) return;
-      const linkElement = document.createElement('link');
-      linkElement.rel = 'stylesheet';
-      linkElement.href = 'https://uicdn.toast.com/tui-image-editor/latest/tui-image-editor.css';
-      document.head.appendChild(linkElement);
       {add-button}
       const imageContainer = images[0].parentElement;
       {modal-container}
@@ -114,13 +164,16 @@
   ++  modal-container
     """
     const modalContainer = document.createElement('div');
+    let isResizing = false;
+
     document.addEventListener('click', (event) => \{
       const ec = document.querySelector('.editor-container');
       if (!ec) return;
       const isClickInsideEditor = ec.contains(event.target);
-      if (!isClickInsideEditor) \{
-        modalContainer.remove();
-      }
+      const isSliderHandle = $(event.target).closest('.tui-image-editor-range-wrap').length !== 0;
+        if (!isSliderHandle && !isClickInsideEditor && !isResizing) \{
+          modalContainer.remove();
+        }
     });
     """
   ::
@@ -138,6 +191,7 @@
       const imageEditor =
         new tui.ImageEditor(editorContainer, {config});
 
+      window.imageEditor = imageEditor;
       window.onresize = function () \{
           imageEditor.ui.resizeEditor();
       };
@@ -146,17 +200,18 @@
       {elems}
 
       addImageForEditing(images[0].src);
-
       {interact}
       """
     ++  funs
       """
       function addImageForEditing(imageUrl) \{
         imageEditor.loadImageFromURL(imageUrl, 'imageName')
-          .then(() => imageEditor.clearUndoStack());
+          .then(result => \{
+            console.log(result);
+          })
       }
-
-      function saveImage() \{
+      function saveImage(copy) \{
+        window.copy = copy || false;
         console.log("saving image");
         dataUrl = imageEditor.toDataURL();
         const byteString = atob(dataUrl.split(',')[1]);
@@ -178,14 +233,17 @@
         includeUI: \{
             loadImage: \{
                 path: images[0].src,
-                name: 'SampleImage',
+                name: 'image',
             },
-            theme: blackTheme, // or whiteTheme
-            initMenu: 'filter',
+            initMenu: 'draw',
             menuBarPosition: 'bottom',
         },
         cssMaxWidth: 700,
         cssMaxHeight: 500,
+        selectionStyle: \{
+            cornerSize: 20,
+            rotatingPointOffset: 70,
+        },
         usageStatistics: false
       }
       """
@@ -197,12 +255,21 @@
       modalContainer.appendChild(editorContainer);
       document.body.appendChild(modalContainer);
       const saveButton = $('.tui-image-editor-header-buttons .tui-image-editor-download-btn')
+      const buttonContainer = saveButton.parent();
       const newButton = $('<button>', \{
           class: 'tui-image-editor-download-btn',
           text: 'Save',
-          click: saveImage,
+          click: ()   =>  saveImage(false),
+      })  ;
+      const copyButton = $('<button>', \{
+          class: 'tui-image-editor-download-btn',
+          text: 'Copy',
+          click: () => saveImage(true)
       });
       saveButton.replaceWith(newButton);
+      buttonContainer.append(copyButton);
+
+      setUpHtml5Sliders();
       """
     ++  interact
       """
@@ -216,6 +283,12 @@
             }),
           ],
           inertia: true,
+        })
+        .on('resizestart', () => \{
+          isResizing = true;
+        })
+        .on('resizeend', () => \{
+          isResizing = false;
         })
         .on('resizemove', (event) => \{
           const target = event.target;
@@ -233,7 +306,18 @@
      {init}
      {upload}
      {update-curio}
+     {poke}
      """
+  ++  poke
+    """
+    function pokeGreenRoom(data) \{
+      const ship = window.ship;
+      const app = 'green-room';
+      const mark = 'green-room-action';
+
+      urb.poke(\{app: app, mark: mark, json: data, ship: ship});
+    }
+    """
   ::
   ++  init
     """
@@ -241,6 +325,17 @@
       return urls.map(loadScript);
     }
 
+    function loadCss() \{
+      return new Promise((resolve) => \{
+          const linkElement = document.createElement('link');
+          linkElement.rel = 'stylesheet';
+          linkElement.href = 'https://uicdn.toast.com/tui-image-editor/latest/tui-image-editor.css';
+          linkElement.onload = () => \{
+            resolve();
+          };
+          document.head.appendChild(linkElement);
+      });
+    }
     function loadScript(src) \{
       return new Promise((resolve) => \{
           const script = document.createElement('script');
@@ -256,10 +351,15 @@
   ++  upload
     """
     function upload(blob) \{
+      // warehouse should be defined
+      if (!warehouse || !emptyUploader) \{
+        console.log("warehouse not defined");
+        return;
+      }
       const file = new File([blob], "sample.png", \{type: blob.type})
       const \{
         s3 : \{ credentials, configuration }
-      } = fileStore()
+      } = warehouse()
 
       const files = [file];
       files.length = 1;
@@ -267,7 +367,7 @@
         return index >= 0 && index < this.length ? this[index] : null;
       };
       const currentBucket = configuration.currentBucket;
-      fileUploader().createClient(fileStore().s3.credentials, 'us-east-1')
+      fileUploader().createClient(warehouse().s3.credentials, 'us-east-1')
       fileUploader().uploaders[key] = emptyUploader();
       fileUploader().uploadFiles(key, files, currentBucket)
       console.log("uploaded file, closing modal");
@@ -276,24 +376,32 @@
   ::
   ++  update-curio
     """
-    function updateCurio(key, path) \{
+    function updateCurio(key) \{
       const lastUpload = fileUploader().getMostRecent(key);
       if (lastUpload?.status === "success") \{
-        const s = path.split('/');
+        const s = location.pathname.split('/');
+        const groupIdx = s.indexOf('groups') + 2;
+        const group = s.slice(groupIdx, groupIdx + 2).join('/');
         const pathElements = s.slice(s.indexOf('heap') + 1);
-        const flag = pathElements.slice(0, 2).join('/');
+        const chan = pathElements.slice(0, 2).join('/');
         const time = pathElements[pathElements.length - 1];
-        const sent = UrbitAPI.daToUnix(bigInt(time));
-        const heart = \{
-          title: null,
-          content: \{ block: [], inline: [\{link: \{href: lastUpload.url, content: lastUpload.url}}]},
-          author: UrbitAPI.preSig(window.ship),
-          sent: sent,
-          replying: null
+        console.log("update curio");
+        const data = \{
+            group: group,
+            update:\{
+              thing: \{
+                chan: chan,
+                content: lastUpload.url,
+                id: UrbitAPI.decToUd(time),
+                time: time
+              },
+            diff: \{
+              save: copy || false,
+            }
+           }
         };
-
-        heap().editCurio(flag, time, heart);
         fileUploader().clear(key);
+        pokeGreenRoom(data);
      };
     }
     """
@@ -306,10 +414,13 @@
     """
     // editor button added
     var buttonAdded = false;
-    // heap path
-    var path = undefined;
     // key for file uploader (fileUploader().uploaders[key])
     const key = 'green-room-input';
+    // urbit api
+    loadScript('https://cdn.jsdelivr.net/npm/@urbit/http-api/dist/urbit-http-api.min.js')
+      .then(() => \{
+        window.urb = new UrbitHttpApi.Urbit('', '', window.desk);
+      });
     """
   --
 ::
@@ -354,7 +465,7 @@
           padding: 10px;
           z-index: 999999;
       }
-    @keyframes pulse \{
+    @keyframes pulse-button \{
       0% \{
         transform: scale(1);
       }
@@ -367,7 +478,7 @@
     }
 
     .green-room-button:hover \{
-      animation: pulse 2s linear infinite;
+      animation: pulse-button 2s linear infinite;
     }
       .tui-image-editor-container .tui-image-editor-header-logo \{
           display: none;
@@ -422,7 +533,6 @@
   ++  black-theme
     """
     var blackTheme = \{
-    'common.bi.image': 'https://uicdn.toast.com/toastui/img/tui-image-editor-bi.png',
     'common.bisize.width': '251px',
     'common.bisize.height': '21px',
     'common.backgroundImage': 'none',
